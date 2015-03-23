@@ -7,7 +7,8 @@
 %%
 %% The client works like this:
 %%  * When starting up, we connect to Redis with the given connection
-%%     information, or fail.
+%%    information. If Redis server is not active depending on
+%%    RequireRedisOnStart param we fail if true, or keep trying if false.
 %%  * Users calls us using gen_server:call, we send the request to Redis,
 %%    add the calling process at the end of the queue and reply with
 %%    noreply. We are then free to handle new requests and may reply to
@@ -25,7 +26,7 @@
 -include("eredis.hrl").
 
 %% API
--export([start_link/6, stop/1, select_database/2]).
+-export([start_link/7, stop/1, select_database/2]).
 
 -export([do_sync_command/2]).
 
@@ -55,11 +56,14 @@
                  Database::integer() | undefined,
                  Password::string(),
                  ReconnectSleep::reconnect_sleep(),
+                 RequireRedisOnStart::true | false,
                  ConnectTimeout::integer() | undefined) ->
                         {ok, Pid::pid()} | {error, Reason::term()}.
-start_link(Host, Port, Database, Password, ReconnectSleep, ConnectTimeout) ->
+start_link(Host, Port, Database, Password,
+           ReconnectSleep, RequireRedisOnStart, ConnectTimeout) ->
     gen_server:start_link(?MODULE, [Host, Port, Database, Password,
-                                    ReconnectSleep, ConnectTimeout], []).
+                                    ReconnectSleep, RequireRedisOnStart,
+                                    ConnectTimeout], []).
 
 
 stop(Pid) ->
@@ -69,7 +73,8 @@ stop(Pid) ->
 %% gen_server callbacks
 %%====================================================================
 
-init([Host, Port, Database, Password, ReconnectSleep, ConnectTimeout]) ->
+init([Host, Port, Database, Password,
+      ReconnectSleep, RequireRedisOnStart, ConnectTimeout]) ->
     State = #state{host = Host,
                    port = Port,
                    database = read_database(Database),
@@ -84,7 +89,14 @@ init([Host, Port, Database, Password, ReconnectSleep, ConnectTimeout]) ->
         {ok, NewState} ->
             {ok, NewState};
         {error, Reason} ->
-            {stop, {connection_error, Reason}}
+            case {Reason, RequireRedisOnStart} of
+                {{connection_error, econnrefused}, false} ->
+                    %% Self = self(),
+                    %% spawn(fun() -> reconnect_loop(Self, State) end),
+                    {ok, State#state{socket = undefined}};
+                {Reason, _} ->
+                    {stop, {connection_error, Reason}}
+            end
     end.
 
 handle_call({request, Req}, From, State) ->
