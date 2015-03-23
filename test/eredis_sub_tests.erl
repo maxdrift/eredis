@@ -116,7 +116,7 @@ pubsub_connect_disconnect_messages_test() ->
 
 drop_queue_test() ->
     Pub = c(),
-    {ok, Sub} = eredis_sub:start_link("127.0.0.1", 6379, "", 100, 10, drop),
+    {ok, Sub} = eredis_sub:start_link("127.0.0.1", 6379, "", 100, true, 10, drop),
     add_channels(Sub, [<<"foo">>]),
     ok = eredis_sub:controlling_process(Sub),
 
@@ -129,7 +129,7 @@ drop_queue_test() ->
 
 crash_queue_test() ->
     Pub = c(),
-    {ok, Sub} = eredis_sub:start_link("127.0.0.1", 6379, "", 100, 10, exit),
+    {ok, Sub} = eredis_sub:start_link("127.0.0.1", 6379, "", 100, true, 10, exit),
     add_channels(Sub, [<<"foo">>]),
 
     true = unlink(Sub),

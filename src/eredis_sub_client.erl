@@ -14,7 +14,7 @@
 
 
 %% API
--export([start_link/6, stop/1]).
+-export([start_link/7, stop/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -28,11 +28,14 @@
                  Port::integer(),
                  Password::string(),
                  ReconnectSleep::reconnect_sleep(),
+                 RequireRedisOnStart::true | false,
                  MaxQueueSize::integer() | infinity,
                  QueueBehaviour::drop | exit) ->
                         {ok, Pid::pid()} | {error, Reason::term()}.
-start_link(Host, Port, Password, ReconnectSleep, MaxQueueSize, QueueBehaviour) ->
-    Args = [Host, Port, Password, ReconnectSleep, MaxQueueSize, QueueBehaviour],
+start_link(Host, Port, Password, ReconnectSleep,
+           RequireRedisOnStart, MaxQueueSize, QueueBehaviour) ->
+    Args = [Host, Port, Password, ReconnectSleep,
+            RequireRedisOnStart, MaxQueueSize, QueueBehaviour],
     gen_server:start_link(?MODULE, Args, []).
 
 
@@ -43,7 +46,8 @@ stop(Pid) ->
 %% gen_server callbacks
 %%====================================================================
 
-init([Host, Port, Password, ReconnectSleep, MaxQueueSize, QueueBehaviour]) ->
+init([Host, Port, Password, ReconnectSleep,
+      RequireRedisOnStart, MaxQueueSize, QueueBehaviour]) ->
     State = #state{host            = Host,
                    port            = Port,
                    password        = list_to_binary(Password),
@@ -59,7 +63,15 @@ init([Host, Port, Password, ReconnectSleep, MaxQueueSize, QueueBehaviour]) ->
             ok = inet:setopts(NewState#state.socket, [{active, once}]),
             {ok, NewState};
         {error, Reason} ->
-            {stop, {connection_error, Reason}}
+            case {Reason, RequireRedisOnStart} of
+                {{connection_error, econnrefused}, false} ->
+                    %% Self = self(),
+                    %% send_to_controller({eredis_disconnected, Self}, State),
+                    %% spawn(fun() -> reconnect_loop(Self, State) end),
+                    {ok, State#state{socket = undefined}};
+                {Reason, _} ->
+                    {stop, {connection_error, Reason}}
+            end
     end.
 
 %% Set the controlling process. All messages on all channels are directed here.

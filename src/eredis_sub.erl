@@ -8,7 +8,7 @@
 %% Specified in http://www.erlang.org/doc/man/gen_server.html#call-3
 -define(TIMEOUT, 5000).
 
--export([start_link/0, start_link/1, start_link/3, start_link/6, stop/1,
+-export([start_link/0, start_link/1, start_link/3, start_link/7, stop/1,
          controlling_process/1, controlling_process/2, controlling_process/3,
          ack_message/1, subscribe/2, unsubscribe/2, channels/1]).
 
@@ -26,32 +26,34 @@ start_link() ->
     start_link([]).
 
 start_link(Host, Port, Password) ->
-    start_link(Host, Port, Password, 100, infinity, drop).
+    start_link(Host, Port, Password, 100, true, infinity, drop).
 
 start_link(Host, Port, Password, ReconnectSleep,
-           MaxQueueSize, QueueBehaviour)
+           RequireRedisOnStart, MaxQueueSize, QueueBehaviour)
   when is_list(Host) andalso
        is_integer(Port) andalso
        is_list(Password) andalso
        (is_integer(ReconnectSleep) orelse ReconnectSleep =:= no_reconnect) andalso
+       (RequireRedisOnStart =:= true orelse RequireRedisOnStart =:= false) andalso
        (is_integer(MaxQueueSize) orelse MaxQueueSize =:= infinity) andalso
        (QueueBehaviour =:= drop orelse QueueBehaviour =:= exit) ->
 
     eredis_sub_client:start_link(Host, Port, Password, ReconnectSleep,
-                                 MaxQueueSize, QueueBehaviour).
+                                 RequireRedisOnStart, MaxQueueSize, QueueBehaviour).
 
 
 %% @doc: Callback for starting from poolboy
 -spec start_link(server_args()) -> {ok, Pid::pid()} | {error, Reason::term()}.
 start_link(Args) ->
-    Host           = proplists:get_value(host, Args, "127.0.0.1"),
-    Port           = proplists:get_value(port, Args, 6379),
-    Password       = proplists:get_value(password, Args, ""),
-    ReconnectSleep = proplists:get_value(reconnect_sleep, Args, 100),
-    MaxQueueSize   = proplists:get_value(max_queue_size, Args, infinity),
-    QueueBehaviour = proplists:get_value(queue_behaviour, Args, drop),
+    Host                = proplists:get_value(host, Args, "127.0.0.1"),
+    Port                = proplists:get_value(port, Args, 6379),
+    Password            = proplists:get_value(password, Args, ""),
+    ReconnectSleep      = proplists:get_value(reconnect_sleep, Args, 100),
+    RequireRedisOnStart = proplists:get_value(require_redis_on_start, Args, true),
+    MaxQueueSize        = proplists:get_value(max_queue_size, Args, infinity),
+    QueueBehaviour      = proplists:get_value(queue_behaviour, Args, drop),
     start_link(Host, Port, Password, ReconnectSleep,
-               MaxQueueSize, QueueBehaviour).
+               RequireRedisOnStart, MaxQueueSize, QueueBehaviour).
 
 stop(Pid) ->
     eredis_sub_client:stop(Pid).
@@ -182,5 +184,3 @@ ppub_example() ->
     {ok, P} = eredis:start_link(),
     eredis:q(P, ["PUBLISH", "foo123", "bar"]),
     eredis_client:stop(P).
-
-
