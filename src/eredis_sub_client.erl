@@ -64,10 +64,10 @@ init([Host, Port, Password, ReconnectSleep,
             {ok, NewState};
         {error, Reason} ->
             case {Reason, RequireRedisOnStart} of
-                {{connection_error, econnrefused}, false} ->
-                    %% Self = self(),
-                    %% send_to_controller({eredis_disconnected, Self}, State),
-                    %% spawn(fun() -> reconnect_loop(Self, State) end),
+                {{connection_error, _}, false} ->
+                    Self = self(),
+                    send_to_controller({eredis_disconnected, Self}, State),
+                    spawn(fun() -> reconnect_loop(Self, State) end),
                     {ok, State#state{socket = undefined}};
                 {Reason, _} ->
                     {stop, {connection_error, Reason}}
